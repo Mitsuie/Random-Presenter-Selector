@@ -12,7 +12,7 @@ def excel_to_csv_with_column(excel_file_path):
         sheet = wb.worksheets[0]
         
         # デフォルトのファイル名を設定（元のファイル名から拡張子を.csvに変更）
-        default_file_name = os.path.splitext(os.path.basename(excel_file_path))[0] + ".csv"
+        default_file_name = "演習投影名簿_｛科目名｝" + ".csv"
         
         # 保存先ファイルのダイアログを表示
         csv_file_path = filedialog.asksaveasfilename(
@@ -48,12 +48,10 @@ def excel_to_csv_with_column(excel_file_path):
 
 # 使用例
 if __name__ == "__main__":
-    # Tkinterのルートウィンドウを非表示にする
     root = tk.Tk()
     root.withdraw()
     
     # 変換元のExcelファイルのパスをダイアログで選択
-    # openpyxlは.xlsxなどの新しいフォーマットのみをサポートしています
     input_excel = filedialog.askopenfilename(
         title="変換元のExcelファイルを選択",
         filetypes=[("Excelファイル", "*.xlsx *.xlsm *.xltx *.xltm"), ("すべてのファイル", "*.*")]
