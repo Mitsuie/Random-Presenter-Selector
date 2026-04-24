@@ -1,15 +1,23 @@
 import tkinter as tk
+import customtkinter as ctk
 from tkinter import messagebox, filedialog
 import csv
 import random
 import os
+
+# 外観の設定
+ctk.set_appearance_mode("Light")
+ctk.set_default_color_theme("blue")
+
+BASE_FONT_FAMILY = "MS Gothic"
 
 class StudentSelectorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("演習投影学生指名プログラム")
         self.root.geometry("500x500")
-        
+        self.root.resizable(False, False)
+
         self.filename = None
         self.data = []
         self.fieldnames = []
@@ -22,51 +30,77 @@ class StudentSelectorApp:
         self.show_wait_screen()
 
     def create_wait_screen(self):
-        self.wait_frame = tk.Frame(self.root, padx=20, pady=40)
+        self.wait_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         
-        title_label = tk.Label(self.wait_frame, text="演習投影学生指名", font=("Arial", 24, "bold"))
-        title_label.pack(pady=20)
+        title_label = ctk.CTkLabel(self.wait_frame, text="演習投影学生指名プログラム", font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=28, weight="bold"))
+        title_label.pack(pady=(40, 20))
 
-        self.file_label = tk.Label(self.wait_frame, text="対象ファイル: 未選択", wraplength=450, font=("Arial", 12))
-        self.file_label.pack(pady=15)
+        self.file_label = ctk.CTkLabel(self.wait_frame, text="対象ファイル:\n未選択", font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=16, weight="bold"), wraplength=500)
+        self.file_label.pack(pady=30)
 
-        select_file_btn = tk.Button(self.wait_frame, text="CSVファイルを選択", command=self.select_file, font=("Arial", 16, "bold"), width=16, height=2, bg="lightgreen")
-        select_file_btn.pack(pady=10)
+        # ファイル選択ボタン
+        select_btn_color = ("#98FB98", "#3CB371") # ライト/ダーク用 (PaleGreen / MediumSeaGreen)
+        select_file_btn = ctk.CTkButton(self.wait_frame, text="CSVファイルを選択", command=self.select_file, 
+                                        font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=18, weight="bold"), 
+                                        width=220, height=55, fg_color=select_btn_color, hover_color=("#90EE90", "#2E8B57"),
+                                        text_color=("black", "white"))
+        select_file_btn.pack(pady=15)
 
-        self.draw_btn = tk.Button(self.wait_frame, text="抽選開始", command=self.draw_lottery, font=("Arial", 16, "bold"), bg="lightblue", width=16, height=2)
-        self.draw_btn.pack(pady=30)
+        # 抽選開始ボタン
+        draw_btn_color = ("#87CEFA", "#4682B4")
+        self.draw_btn = ctk.CTkButton(self.wait_frame, text="抽選開始", command=self.draw_lottery, 
+                                      font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=18, weight="bold"), 
+                                      fg_color=draw_btn_color, hover_color=("#00BFFF", "#4169E1"), 
+                                      text_color=("black", "white"), width=220, height=55)
+        self.draw_btn.pack(pady=15)
 
-        exit_btn = tk.Button(self.wait_frame, text="プログラムを終了", command=self.confirm_exit, font=("Arial", 10), width=15, bg="lightcoral")
-        exit_btn.pack(pady=10)
+        # 終了ボタン
+        exit_btn_color = ("#F08080", "#CD5C5C")
+        exit_btn = ctk.CTkButton(self.wait_frame, text="プログラムを終了", command=self.confirm_exit, 
+                                 font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=12, weight="bold"), width=150, height=35,
+                                 fg_color=exit_btn_color, hover_color=("#CD5C5C", "#8B0000"), text_color=("black", "white"))
+        exit_btn.pack(pady=40)
 
     def confirm_exit(self):
         if messagebox.askyesno("確認", "プログラムを終了しますか？"):
             self.root.destroy()
 
     def create_result_screen(self):
-        self.result_frame = tk.Frame(self.root, padx=20, pady=40)
+        self.result_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         
-        self.student_label = tk.Label(self.result_frame, text="", font=("Arial", 20, "bold"))
-        self.student_label.pack(pady=30)
+        self.student_label = ctk.CTkLabel(self.result_frame, text="", font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=24, weight="bold"))
+        self.student_label.pack(pady=(50, 30))
         
-        prompt_label = tk.Label(self.result_frame, text="出席状況を選択してください", font=("Arial", 16))
+        prompt_label = ctk.CTkLabel(self.result_frame, text="出席状況を選択してください", font=ctk.CTkFont(family=BASE_FONT_FAMILY, size=18))
         prompt_label.pack(pady=20)
 
-        btn_frame = tk.Frame(self.result_frame)
-        btn_frame.pack(pady=30)
+        btn_frame = ctk.CTkFrame(self.result_frame, fg_color="transparent")
+        btn_frame.pack(pady=40)
 
-        button_font = ("Arial", 12, "bold")
-        btn_width = 9
-        btn_height = 3
+        button_font = ctk.CTkFont(family=BASE_FONT_FAMILY, size=16, weight="bold")
+        btn_width = 120
+        btn_height = 60
 
-        ok_btn = tk.Button(btn_frame, text="出席", command=lambda: self.save_result("○"), font=button_font, width=btn_width, height=btn_height, bg="lightgreen")
-        ok_btn.pack(side=tk.LEFT, padx=12)
+        # 出席ボタン
+        ok_btn_color = ("#90EE90", "#2E8B57")
+        ok_btn = ctk.CTkButton(btn_frame, text="出席 (○)", command=lambda: self.save_result("○"), 
+                               font=button_font, width=btn_width, height=btn_height, 
+                               fg_color=ok_btn_color, hover_color=("#3CB371", "#006400"), text_color=("black", "white"))
+        ok_btn.pack(side=tk.LEFT, padx=15)
 
-        ng_btn = tk.Button(btn_frame, text="欠席", command=lambda: self.save_result("×"), font=button_font, width=btn_width, height=btn_height, bg="lightcoral")
-        ng_btn.pack(side=tk.LEFT, padx=12)
+        # 欠席ボタン
+        ng_btn_color = ("#F08080", "#B22222")
+        ng_btn = ctk.CTkButton(btn_frame, text="欠席 (×)", command=lambda: self.save_result("×"), 
+                               font=button_font, width=btn_width, height=btn_height, 
+                               fg_color=ng_btn_color, hover_color=("#CD5C5C", "#8B0000"), text_color=("black", "white"))
+        ng_btn.pack(side=tk.LEFT, padx=15)
 
-        skip_btn = tk.Button(btn_frame, text="記入なし\n(戻る)", command=self.show_wait_screen, font=button_font, width=btn_width, height=btn_height, bg="lightgray")
-        skip_btn.pack(side=tk.LEFT, padx=12)
+        # 戻るボタン
+        skip_btn_color = ("#D3D3D3", "#696969")
+        skip_btn = ctk.CTkButton(btn_frame, text="記入なし\n(戻る)", command=self.show_wait_screen, 
+                                 font=button_font, width=btn_width, height=btn_height, 
+                                 fg_color=skip_btn_color, hover_color=("#A9A9A9", "#404040"), text_color=("black", "white"))
+        skip_btn.pack(side=tk.LEFT, padx=15)
 
     def show_wait_screen(self):
         self.result_frame.pack_forget()
@@ -83,7 +117,7 @@ class StudentSelectorApp:
         )
         if filename:
             self.filename = filename
-            self.file_label.config(text=f"対象ファイル:\n{os.path.basename(filename)}")
+            self.file_label.configure(text=f"対象ファイル:\n{os.path.basename(filename)}")
 
     def draw_lottery(self):
         if not self.filename:
@@ -123,7 +157,7 @@ class StudentSelectorApp:
         selected_name = self.data[self.selected_index].get('学生氏名', '不明')
         selected_kana = self.data[self.selected_index].get('学生氏名＿カナ', '不明')
 
-        self.student_label.config(text=f"学籍番号: {self.selected_student}\n氏名: {selected_name}\nカナ: {selected_kana}")
+        self.student_label.configure(text=f"学籍番号: {self.selected_student}\n氏名: {selected_name}\nカナ: {selected_kana}")
         self.show_result_screen()
 
     def save_result(self, result):
@@ -150,6 +184,6 @@ class StudentSelectorApp:
         self.show_wait_screen()
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = ctk.CTk()
     app = StudentSelectorApp(root)
     root.mainloop()
