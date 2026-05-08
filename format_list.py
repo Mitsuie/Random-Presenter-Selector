@@ -31,16 +31,35 @@ def excel_to_csv_with_column(excel_file_path):
         with open(csv_file_path, mode='w', encoding='utf-8-sig', newline='') as f:
             writer = csv.writer(f)
             
-            for i, row in enumerate(sheet.iter_rows(values_only=True)):
+            header_found = False
+            col_id = -1
+            col_name = -1
+            col_kana = -1
+
+            for row in sheet.iter_rows(values_only=True):
                 row_list = list(row)
-                if i == 0:
-                    # ヘッダー行に「投影実施可否」列を追加
-                    row_list.append('投影実施可否')
-                else:
-                    # データ行には空欄を追加
-                    row_list.append('')
                 
-                writer.writerow(row_list)
+                if not header_found:
+                    # 「学籍番号」が含まれる行をヘッダー行として探す
+                    if '学籍番号' in row_list:
+                        header_found = True
+                        col_id = row_list.index('学籍番号')
+                        col_name = row_list.index('学生氏名') if '学生氏名' in row_list else -1
+                        col_kana = row_list.index('学生氏名＿カナ') if '学生氏名＿カナ' in row_list else -1
+                        
+                        # 新しいヘッダーを作成
+                        new_header = ['学籍番号', '学生氏名', '学生氏名＿カナ', '投影実施可否']
+                        writer.writerow(new_header)
+                else:
+                    # データ行の処理（学籍番号が空でない場合のみ出力）
+                    if col_id != -1 and row_list[col_id] is not None and str(row_list[col_id]).strip() != '':
+                        new_row = [
+                            row_list[col_id] if col_id != -1 else '',
+                            row_list[col_name] if col_name != -1 else '',
+                            row_list[col_kana] if col_kana != -1 else '',
+                            ''  # 投影実施可否の初期値は空欄
+                        ]
+                        writer.writerow(new_row)
         
         print(f"成功: {excel_file_path} に「投影実施可否」列を追加し、{csv_file_path} に変換・保存しました。")
     except Exception as e:
