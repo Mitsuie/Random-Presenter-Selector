@@ -11,10 +11,22 @@ def excel_to_csv_with_column(excel_file_path):
         # 最初のシートを取得
         sheet = wb.worksheets[0]
         
-        # デフォルトのファイル名を設定（元のファイル名から拡張子を.csvに変更）
-        default_file_name = "演習投影名簿_｛科目名｝" + ".csv"
+        # イテレータを取得
+        row_iter = sheet.iter_rows(values_only=True)
         
-        # 保存先ファイルのダイアログを表示
+        # ヘッダー行を探す
+        for row in row_iter:
+            if '学籍番号' in row and '学生氏名' in row and '学生氏名＿カナ' in row:
+                col_id = row.index('学籍番号')
+                col_name = row.index('学生氏名')
+                col_kana = row.index('学生氏名＿カナ')
+                break
+        else:
+            # イテレータが最後まで到達した（breakされなかった）場合はヘッダーなし
+            raise ValueError("選択されたExcelファイルに必須列（「学籍番号」「学生氏名」「学生氏名＿カナ」）が見つかりませんでした。")
+        
+        # 必須列が見つかった場合のみ、保存先ファイルのダイアログを表示
+        default_file_name = "演習投影名簿_｛科目名｝" + ".csv"
         csv_file_path = filedialog.asksaveasfilename(
             title="変換したCSVファイルの保存先を選択",
             initialfile=default_file_name,
@@ -31,18 +43,23 @@ def excel_to_csv_with_column(excel_file_path):
         with open(csv_file_path, mode='w', encoding='utf-8-sig', newline='') as f:
             writer = csv.writer(f)
             
-            for i, row in enumerate(sheet.iter_rows(values_only=True)):
-                row_list = list(row)
-                if i == 0:
-                    # ヘッダー行に「投影実施可否」列を追加
-                    row_list.append('投影実施可否')
-                else:
-                    # データ行には空欄を追加
-                    row_list.append('')
-                
-                writer.writerow(row_list)
-        
-        print(f"成功: {excel_file_path} に「投影実施可否」列を追加し、{csv_file_path} に変換・保存しました。")
+            # 新しいヘッダーを作成
+            new_header = ['学籍番号', '学生氏名', '学生氏名＿カナ', '投影実施可否']
+            writer.writerow(new_header)
+            
+            # 残りのデータ行を処理（ヘッダーが見つかった次の行から再開される）
+            for row in row_iter:
+                # 学籍番号が空でない場合のみ出力
+                if row[col_id] is not None and str(row[col_id]).strip() != '':
+                    new_row = [
+                        row[col_id],
+                        row[col_name],
+                        row[col_kana],
+                        ''  # 投影実施可否の初期値は空欄
+                    ]
+                    writer.writerow(new_row)
+            
+        print(f"成功: {excel_file_path} から必須3列（「学籍番号」「学生氏名」「学生氏名＿カナ」）を抽出し、「投影実施可否」列を追加したCSVとして {csv_file_path} に変換・保存しました。")
     except Exception as e:
         print(f"エラーが発生しました: {e}")
 
@@ -61,3 +78,4 @@ if __name__ == "__main__":
         excel_to_csv_with_column(input_excel)
     else:
         print("ファイルの選択がキャンセルされました。")
+
