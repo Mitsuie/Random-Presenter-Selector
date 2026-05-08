@@ -80,3 +80,6 @@ if __name__ == "__main__":
         excel_to_csv_with_column(input_excel)
     else:
         print("ファイルの選択がキャンセルされました。")
+        
+    # 処理終了後にコンソールがすぐに閉じないようにキー入力を待つ
+    input("\nEnterキーを押して終了してください...")
