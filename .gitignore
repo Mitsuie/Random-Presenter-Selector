@@ -2,3 +2,15 @@
 *.xlsx
 !example_files/*.csv
 !example_files/*.xlsx
+
+# ビルド出力と設定ファイル
+build/
+dist/
+*.spec
+
+# AI出力ログ
+log_AI-output/
+
+# 仮想環境
+venv_select_student/
+venv_format_list/
