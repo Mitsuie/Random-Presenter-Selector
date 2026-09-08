@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 import customtkinter as ctk
 from ui.font_config import get_font_family
 from ui.selector_view import SelectorView
@@ -83,10 +84,10 @@ class MainWindow(ctk.CTk):
         # 外観切替ボタン（終了ボタンの左隣）
         self.theme_btn = ctk.CTkButton(
             self.header_frame,
-            text="🌙 Light",
+            text="🌓 外観切替",
             command=self.toggle_theme,
             font=ctk.CTkFont(family=self.font_family, size=14, weight="bold"),
-            width=90,
+            width=100,
             height=36,
             fg_color=("gray80", "gray28"),
             hover_color=("gray70", "gray38"),
@@ -96,7 +97,6 @@ class MainWindow(ctk.CTk):
 
     def confirm_exit(self):
         """プログラム終了の確認ダイアログ"""
-        from tkinter import messagebox
         if messagebox.askyesno("確認", "プログラムを終了しますか？"):
             self.destroy()
 
@@ -106,10 +106,7 @@ class MainWindow(ctk.CTk):
         self.content_container.pack(fill="both", expand=True)
 
         # 学生指名ビュー
-        self.selector_view = SelectorView(
-            self.content_container,
-            on_exit_request=self.destroy
-        )
+        self.selector_view = SelectorView(self.content_container)
 
         # 名簿変換ビュー
         self.converter_view = ConverterView(
@@ -142,8 +139,6 @@ class MainWindow(ctk.CTk):
         if self.current_theme == "Light":
             self.current_theme = "Dark"
             ctk.set_appearance_mode("Dark")
-            self.theme_btn.configure(text="☀️ Dark")
         else:
             self.current_theme = "Light"
             ctk.set_appearance_mode("Light")
-            self.theme_btn.configure(text="🌙 Light")

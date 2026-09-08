@@ -8,9 +8,8 @@ from ui.font_config import get_font_family
 class SelectorView(ctk.CTkFrame):
     """学生指名機能のビュー（待機画面・結果画面を内包）"""
 
-    def __init__(self, master, on_exit_request=None, **kwargs):
+    def __init__(self, master, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
-        self.on_exit_request = on_exit_request
         self.manager = LotteryManager()
         self.font_family = get_font_family()
 
@@ -276,10 +275,3 @@ class SelectorView(ctk.CTkFrame):
             messagebox.showerror("ファイルロックエラー", str(pe))
         except Exception as e:
             messagebox.showerror("エラー", f"保存中にエラーが発生しました:\n{e}")
-
-    def confirm_exit(self):
-        if messagebox.askyesno("確認", "プログラムを終了しますか？"):
-            if self.on_exit_request:
-                self.on_exit_request()
-            else:
-                self.quit()
