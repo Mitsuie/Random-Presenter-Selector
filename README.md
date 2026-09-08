@@ -71,21 +71,39 @@ python main.py
 
 ## プロジェクト構成
 
-```
+```text
 演習投影学生指名プログラム/
 │
-├── main.py                  # アプリケーションのエントリーポイント
+├── build_all.bat            # ワンクリック全自動ビルドバッチ
 ├── requirements.txt         # 依存パッケージ定義
-├── main.spec                # 単一EXEビルド設定
+├── main.py                  # アプリケーションのエントリーポイント
 │
 ├── core/                    # 業務ロジック層（GUI非依存）
+│   ├── constants.py         # アプリバージョン・GitHubリポジトリ等の一元定義
+│   ├── utils.py             # リソースパス動的解決（get_resource_path）
+│   ├── app_updater.py       # 外部依存ゼロのGitHub Releases自動更新エンジン
 │   ├── roster_converter.py  # Excelから必須列抽出＆CSV変換
 │   └── lottery_manager.py   # CSV読み込み・集計・抽選・結果保存
 │
 ├── ui/                      # プレゼンテーション層（CustomTkinter）
-│   ├── main_window.py       # メインウィンドウ（ヘッダー・モード管理）
+│   ├── main_window.py       # メインウィンドウ（ヘッダー・モード管理・更新検知）
+│   ├── update_dialog.py     # アプリ更新案内・ダウンロード・自動適用ダイアログ
 │   ├── selector_view.py     # 学生指名画面（待機・抽選結果）
-│   └── converter_view.py    # 名簿変換画面（ステップ入力・連携）
+│   ├── converter_view.py    # 名簿変換画面（ステップ入力・連携）
+│   └── font_config.py       # フォント設定
+│
+├── packaging/               # パッケージング・配布用設定
+│   ├── build.py             # クリーン環境・ローカルTemp作業全自動ビルドエンジン
+│   ├── app.spec             # PyInstaller定義（--onedir高速起動）
+│   ├── version_info.txt     # Windows実行ファイルメタデータ
+│   ├── installer.iss        # Inno Setupインストーラー定義スクリプト
+│   ├── generate_icon.py     # アプリアイコン生成スクリプト
+│   └── app_icon.ico         # マルチサイズアプリアイコン (16x16〜256x256)
+│
+├── tests/                   # ユニットテスト群
+│   ├── test_updater.py      # 自動更新・パス解決の単体テスト
+│   ├── test_lottery_manager.py
+│   └── test_roster_converter.py
 │
 └── example_files/           # サンプルデータ
     ├── example.xlsx         # サンプルExcel名簿
@@ -94,11 +112,17 @@ python main.py
 
 ---
 
-## 実行ファイルのビルド（配布用exeの作成）
+## 実行ファイル・インストーラーのビルド
 
-以下のコマンドを実行することで、単一の実行ファイル（`.exe`）を生成できます。
+本システムでは、最速の起動速度と高い安定性を実現するため、**ディレクトリ形式（`--onedir`）＋ Inno Setup インストーラー** の構成を採用しています。
 
-```bash
-pyinstaller --clean main.spec
-```
-ビルドが完了すると、`dist/演習投影統合管理システム.exe` に実行ファイルが生成されます。
+### ワンクリック自動ビルド（推奨）
+ルートディレクトリの `build_all.bat` をダブルクリックするだけで、全自動でビルドが実行されます。
+（またはターミナルから `python packaging/build.py` を実行）
+
+ビルドエンジンは以下の処理を完全自動で行います：
+1. 一時的なクリーン仮想環境をローカル `%TEMP%` 上に作成（Google Drive等のクラウド同期ファイルロックを防止）
+2. 最小限の依存関係をインストール
+3. PyInstaller による `--onedir` 形式の実行ファイル群を `dist/Random-Presenter-Selector/` に生成
+4. Inno Setup（インストール済みの場合）により、配布用インストーラー（`dist_installer/Random-Presenter-Selector_Setup_v1.0.0.exe`）を生成
+5. 一時ビルド環境の自動クリーンアップ

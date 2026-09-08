@@ -1,6 +1,11 @@
 import tkinter as tk
 from tkinter import messagebox
+from typing import Optional
 import customtkinter as ctk
+from core.constants import APP_VERSION, APP_DISPLAY_NAME, GITHUB_OWNER, GITHUB_REPO
+from core.app_updater import check_for_updates_async, UpdateInfo
+from core.utils import get_resource_path
+from ui.update_dialog import UpdateDialog
 from ui.font_config import get_font_family
 from ui.selector_view import SelectorView
 from ui.converter_view import ConverterView
@@ -15,9 +20,17 @@ class MainWindow(ctk.CTk):
         super().__init__()
 
         # 基本設定
-        self.title("演習投影 統合管理システム")
+        self.title(APP_DISPLAY_NAME)
         self.geometry("720x620")
         self.resizable(False, False)
+
+        # アプリアイコン設定
+        icon_path = get_resource_path("packaging/app_icon.ico")
+        if icon_path.exists():
+            try:
+                self.iconbitmap(str(icon_path))
+            except Exception:
+                pass
 
         # 初期外観モード
         self.current_theme = "Light"
@@ -39,6 +52,9 @@ class MainWindow(ctk.CTk):
 
         # ウィンドウを画面中央に配置
         self.center_window()
+
+        # バックグラウンドで非同期更新確認（起動遅延ゼロ）
+        self._start_update_check()
 
     def center_window(self):
         self.update_idletasks()
@@ -94,6 +110,39 @@ class MainWindow(ctk.CTk):
             text_color=("black", "white")
         )
         self.theme_btn.pack(side=tk.RIGHT, padx=(6, 6), pady=10)
+
+        # 更新案内ボタン（新バージョン検出時のみ動的に表示）
+        self.update_btn = None
+
+    def _start_update_check(self):
+        """起動時にバックグラウンドで最新バージョンを確認"""
+        check_for_updates_async(
+            repo_owner=GITHUB_OWNER,
+            repo_name=GITHUB_REPO,
+            current_version=APP_VERSION,
+            on_complete=self._on_update_checked
+        )
+
+    def _on_update_checked(self, info: Optional[UpdateInfo]):
+        """ワーカースレッドからの完了通知をメインスレッドへ安全にディスパッチ"""
+        self.after(0, lambda: self._apply_update_ui(info))
+
+    def _apply_update_ui(self, info: Optional[UpdateInfo]):
+        """新バージョンが存在する場合、ヘッダーに更新可能ボタンを表示"""
+        if info and info.is_update_available:
+            if not self.update_btn:
+                self.update_btn = ctk.CTkButton(
+                    self.header_frame,
+                    text=f"🚀 v{info.version} 更新可能",
+                    command=lambda: UpdateDialog(self, info, APP_VERSION),
+                    font=ctk.CTkFont(family=self.font_family, size=13, weight="bold"),
+                    height=36,
+                    fg_color=("#0969da", "#1f6feb"),
+                    hover_color=("#054da7", "#1158c7"),
+                    text_color="white"
+                )
+                # 外観切替ボタンの左隣（RIGHTパック順）に配置
+                self.update_btn.pack(side=tk.RIGHT, padx=(6, 6), pady=10)
 
     def confirm_exit(self):
         """プログラム終了の確認ダイアログ"""
