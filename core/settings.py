@@ -1,5 +1,5 @@
 """
-利用者設定（外観モード・直近のCSV・学籍番号の表示）の保存と読み込み
+利用者設定（外観モード・直近のCSV）の保存と読み込み
 保存先: %LOCALAPPDATA%\\Random-Presenter-Selector\\settings.json
 """
 import json
@@ -19,7 +19,6 @@ class Settings:
     DEFAULTS = {
         "theme": "Light",
         "last_csv_path": "",
-        "show_student_id": True,
     }
 
     def __init__(self, path: Optional[Path] = None):
