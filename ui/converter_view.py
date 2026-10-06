@@ -186,6 +186,15 @@ class ConverterView(ctk.CTkFrame):
         if not out_csv:
             messagebox.showwarning("警告", "保存先CSVファイルを指定してください。")
             return
+        if os.path.exists(out_csv) and not messagebox.askyesno(
+            "上書きの確認",
+            f"保存先のCSVファイルはすでに存在します:\n{out_csv}\n\n"
+            "上書きすると、このCSVに記録済みの出席記録（投影実施可否）はすべて失われます。\n"
+            "上書きしてよろしいですか？",
+            icon="warning",
+            default="no"
+        ):
+            return
 
         try:
             res = convert_excel_to_csv(in_excel, out_csv)

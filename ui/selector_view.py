@@ -208,7 +208,7 @@ class SelectorView(ctk.CTkFrame):
         back_btn = ctk.CTkButton(
             btn_frame,
             text="記入なし\n(戻る)",
-            command=self.show_wait_screen,
+            command=self.cancel_selection,
             font=btn_font,
             width=w,
             height=h,
@@ -221,6 +221,11 @@ class SelectorView(ctk.CTkFrame):
     def show_wait_screen(self):
         self.result_frame.pack_forget()
         self.wait_frame.pack(fill="both", expand=True)
+
+    def cancel_selection(self):
+        """記録せずに待機画面へ戻る"""
+        self.manager.clear_selection()
+        self.show_wait_screen()
 
     def show_result_screen(self):
         self.wait_frame.pack_forget()
@@ -239,6 +244,8 @@ class SelectorView(ctk.CTkFrame):
         try:
             stats = self.manager.load_csv(filename)
             self.update_stats_display(filename, stats)
+            # 抽選結果画面のまま別の名簿を読み込んだ場合に、前の学生が表示され続けないようにする
+            self.show_wait_screen()
         except Exception as e:
             messagebox.showerror("エラー", f"CSVファイルの読み込みに失敗しました:\n{e}")
 
@@ -266,12 +273,21 @@ class SelectorView(ctk.CTkFrame):
 
     def record_result(self, result: str):
         try:
-            self.manager.save_result(result)
+            reloaded = self.manager.save_result(result)
             stats = self.manager.get_statistics()
             self.update_stats_display(self.manager.filename, stats)
-            messagebox.showinfo("保存完了", f"結果（{result}）をCSVに保存しました。")
+            msg = f"結果（{result}）をCSVに保存しました。"
+            if reloaded:
+                msg = "CSVが外部で変更されていたため、読み込み直してから保存しました。\n" + msg
+            messagebox.showinfo("保存完了", msg)
             self.show_wait_screen()
         except PermissionError as pe:
             messagebox.showerror("ファイルロックエラー", str(pe))
+        except LotteryError as le:
+            # 外部変更で対象学生に記録できなかった場合など。最新の状態を表示して待機画面へ戻る
+            self.update_stats_display(self.manager.filename, self.manager.get_statistics())
+            messagebox.showerror("エラー", str(le))
+            if self.manager.current_selected_index is None:
+                self.show_wait_screen()
         except Exception as e:
             messagebox.showerror("エラー", f"保存中にエラーが発生しました:\n{e}")
