@@ -9,6 +9,7 @@ import sys
 import threading
 import webbrowser
 import subprocess
+import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
 import customtkinter as ctk
@@ -145,7 +146,7 @@ class UpdateDialog:
                         return
                     self._last_pct = pct
                     msg = f"ダウンロード中: {dl/(1024*1024):.1f} MB / {total/(1024*1024):.1f} MB ({pct}%)"
-                    self.dialog.after(0, lambda: self._update_prog_ui(pct, msg))
+                    self._post(lambda: self._update_prog_ui(pct, msg))
 
                 path = download_installer(
                     self.update_info.installer_download_url,
@@ -154,17 +155,24 @@ class UpdateDialog:
                     cancel_event=self.cancel_event,
                     expected_size=self.update_info.installer_size
                 )
-                self.dialog.after(0, lambda: self._on_download_complete(path))
+                self._post(lambda: self._on_download_complete(path))
             except InterruptedError:
-                self.dialog.after(0, self._on_cancelled)
+                self._post(self._on_cancelled)
             except Exception as e:
                 logger.warning("更新のダウンロードに失敗しました", exc_info=True)
                 # except を抜けると e は削除されるため、メインスレッドで使う値を先に取り出す
                 err = str(e)
-                self.dialog.after(0, lambda: self._on_failed(err))
+                self._post(lambda: self._on_failed(err))
 
         self.download_thread = threading.Thread(target=_worker, daemon=True)
         self.download_thread.start()
+
+    def _post(self, func):
+        """ワーカースレッドからメインスレッドへ処理を渡す（ダイアログが閉じられていたら何もしない）"""
+        try:
+            self.dialog.after(0, func)
+        except (RuntimeError, tk.TclError):
+            pass
 
     def _update_prog_ui(self, pct, msg):
         self.progress_bar.set(pct / 100)

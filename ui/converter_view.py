@@ -13,9 +13,6 @@ class ConverterView(ctk.CTkFrame):
         self.on_start_lottery = on_start_lottery
         self.font_family = get_font_family()
 
-        self.input_excel_path = ""
-        self.output_csv_path = ""
-
         self.create_widgets()
 
     def create_widgets(self):
@@ -24,7 +21,7 @@ class ConverterView(ctk.CTkFrame):
             text="名簿フォーマット変換",
             font=ctk.CTkFont(family=self.font_family, size=28, weight="bold")
         )
-        title_label.pack(pady=(24, 6))
+        title_label.pack(pady=(16, 4))
 
         subtitle_label = ctk.CTkLabel(
             self,
@@ -32,7 +29,7 @@ class ConverterView(ctk.CTkFrame):
             font=ctk.CTkFont(family=self.font_family, size=15),
             text_color=("gray30", "gray75")
         )
-        subtitle_label.pack(pady=(0, 16))
+        subtitle_label.pack(pady=(0, 12))
 
         card = ctk.CTkFrame(self, corner_radius=12)
         card.pack(padx=30, fill="x", pady=6)
@@ -107,7 +104,7 @@ class ConverterView(ctk.CTkFrame):
             hover_color=("#00BFFF", "#1D4ED8"),
             text_color=("black", "white")
         )
-        self.btn_convert.pack(pady=16)
+        self.btn_convert.pack(pady=12)
 
         # 完了メッセージ・連携エリア（初期非表示）
         self.result_card = ctk.CTkFrame(self, corner_radius=12, fg_color=("#E8F8F5", "#133E2B"))
@@ -115,10 +112,11 @@ class ConverterView(ctk.CTkFrame):
         self.success_label = ctk.CTkLabel(
             self.result_card,
             text="",
-            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold"),
-            text_color=("#117864", "#4ADE80")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            text_color=("#117864", "#4ADE80"),
+            wraplength=600
         )
-        self.success_label.pack(pady=(14, 8), padx=20)
+        self.success_label.pack(pady=(10, 6), padx=20)
 
         self.btn_goto_selector = ctk.CTkButton(
             self.result_card,
@@ -131,7 +129,7 @@ class ConverterView(ctk.CTkFrame):
             hover_color=("#27AE60", "#15803D"),
             text_color="white"
         )
-        self.btn_goto_selector.pack(pady=(4, 16))
+        self.btn_goto_selector.pack(pady=(4, 12))
 
     def browse_excel(self):
         filename = filedialog.askopenfilename(
@@ -139,7 +137,6 @@ class ConverterView(ctk.CTkFrame):
             filetypes=[("Excelファイル", "*.xlsx *.xlsm *.xltx *.xltm"), ("すべてのファイル", "*.*")]
         )
         if filename:
-            self.input_excel_path = filename
             self.entry_excel.delete(0, tk.END)
             self.entry_excel.insert(0, filename)
 
@@ -149,7 +146,6 @@ class ConverterView(ctk.CTkFrame):
             default_csv_name = f"演習投影名簿_{base_name}.csv"
             suggested_csv = os.path.join(dir_name, default_csv_name)
 
-            self.output_csv_path = suggested_csv
             self.entry_csv.delete(0, tk.END)
             self.entry_csv.insert(0, suggested_csv)
 
@@ -168,7 +164,6 @@ class ConverterView(ctk.CTkFrame):
             filetypes=[("CSVファイル", "*.csv"), ("すべてのファイル", "*.*")]
         )
         if filename:
-            self.output_csv_path = filename
             self.entry_csv.delete(0, tk.END)
             self.entry_csv.insert(0, filename)
             self.result_card.pack_forget()
@@ -200,12 +195,12 @@ class ConverterView(ctk.CTkFrame):
             res = convert_excel_to_csv(in_excel, out_csv)
             count = res["total_extracted"]
 
-            # 成功表示
-            self.success_label.configure(
-                text=f"✅ 変換が完了しました！（全 {count}名 抽出完了）"
-            )
-            self.result_card.pack(padx=30, fill="x", pady=10)
-            messagebox.showinfo("変換成功", f"{count}名の学生データをCSVに変換・保存しました。\n保存先: {out_csv}")
+            # 成功表示（完了カードのみ。ダイアログは出さない）
+            text = f"✅ 変換が完了しました！（シート「{res['sheet_name']}」から全 {count}名 抽出）"
+            if res["duplicate_ids"]:
+                text += f"\n⚠ 学籍番号の重複が {res['duplicate_ids']} 件あります。元のExcelを確認してください"
+            self.success_label.configure(text=text)
+            self.result_card.pack(padx=30, fill="x", pady=(4, 8))
         except RosterConversionError as rce:
             self.result_card.pack_forget()
             messagebox.showerror("変換エラー", str(rce))
