@@ -160,7 +160,7 @@ class SelectorView(ctk.CTkFrame):
             text_color=("black", "white"),
             text_color_disabled=("gray60", "gray45")
         )
-        self.undo_btn.pack(side=tk.LEFT, padx=(0, 16))
+        self.undo_btn.pack()
 
         self.include_absent_var = tk.BooleanVar(value=self.settings.get("include_absent"))
         self.manager.include_absent = bool(self.include_absent_var.get())
@@ -170,7 +170,7 @@ class SelectorView(ctk.CTkFrame):
             variable=self.include_absent_var,
             command=self.on_toggle_include_absent,
             font=ctk.CTkFont(family=self.font_family, size=14)
-        ).pack(side=tk.LEFT)
+        ).pack(pady=(10, 0))
 
         # 保存結果などの一時的なお知らせ
         self.status_label = ctk.CTkLabel(
