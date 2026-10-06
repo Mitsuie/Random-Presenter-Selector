@@ -19,7 +19,6 @@ class TestSettings(unittest.TestCase):
         settings = Settings(self.path)
         self.assertEqual(settings.get("theme"), "Light")
         self.assertEqual(settings.get("last_csv_path"), "")
-        self.assertTrue(settings.get("show_student_id"))
 
     def test_set_persists(self):
         Settings(self.path).set("theme", "Dark")
@@ -34,10 +33,10 @@ class TestSettings(unittest.TestCase):
     def test_invalid_types_are_ignored(self):
         os.makedirs(os.path.dirname(self.path))
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump({"theme": 1, "show_student_id": False}, f)
+            json.dump({"theme": 1, "last_csv_path": "a.csv"}, f)
         settings = Settings(self.path)
         self.assertEqual(settings.get("theme"), "Light")
-        self.assertFalse(settings.get("show_student_id"))
+        self.assertEqual(settings.get("last_csv_path"), "a.csv")
 
 
 if __name__ == "__main__":

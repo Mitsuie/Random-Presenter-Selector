@@ -160,16 +160,7 @@ class SelectorView(ctk.CTkFrame):
             text_color=("black", "white"),
             text_color_disabled=("gray60", "gray45")
         )
-        self.undo_btn.pack(side=tk.LEFT, padx=(0, 16))
-
-        self.show_id_var = tk.BooleanVar(value=self.settings.get("show_student_id"))
-        ctk.CTkCheckBox(
-            tools_frame,
-            text="学籍番号を表示する",
-            variable=self.show_id_var,
-            command=self.on_toggle_show_id,
-            font=ctk.CTkFont(family=self.font_family, size=14)
-        ).pack(side=tk.LEFT)
+        self.undo_btn.pack(side=tk.LEFT)
 
         # 保存結果などの一時的なお知らせ
         self.status_label = ctk.CTkLabel(
@@ -380,9 +371,6 @@ class SelectorView(ctk.CTkFrame):
     def update_undo_button(self):
         self.undo_btn.configure(state="normal" if self.manager.last_record else "disabled")
 
-    def on_toggle_show_id(self):
-        self.settings.set("show_student_id", bool(self.show_id_var.get()))
-
     def start_draw(self):
         if not self.manager.filename:
             messagebox.showwarning("警告", "CSVファイルを選択してください。")
@@ -393,13 +381,7 @@ class SelectorView(ctk.CTkFrame):
             messagebox.showinfo("情報", "投影実施可否が空欄の学生はいません（全員実施済みです）。")
             return
 
-        if self.show_id_var.get():
-            self.id_label.configure(text=f"学籍番号: {student['student_id']}")
-            self.id_label.pack(pady=(18, 6), before=self.name_label)
-            self.name_label.pack_configure(pady=6)
-        else:
-            self.id_label.pack_forget()
-            self.name_label.pack_configure(pady=(18, 6))
+        self.id_label.configure(text=f"学籍番号: {student['student_id']}")
         self.name_label.configure(text=student['name'])
         self.kana_label.configure(text=f"({student['kana']})")
         self.show_result_screen()
