@@ -1,8 +1,20 @@
-#define MyAppName "演習投影 統合管理システム"
-#define MyAppVersion "1.0.0"
-#define MyAppPublisher "Mitsuie"
-#define MyAppExeName "Random-Presenter-Selector.exe"
-#define MyAppDirName "Random-Presenter-Selector"
+; バージョン・名称は build.py が core/constants.py から /D オプションで渡す。
+; 下記は ISCC を単体で実行した場合の既定値。
+#ifndef MyAppName
+  #define MyAppName "演習投影 統合管理システム"
+#endif
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
+#ifndef MyAppPublisher
+  #define MyAppPublisher "Mitsuie"
+#endif
+#ifndef MyAppExeName
+  #define MyAppExeName "Random-Presenter-Selector.exe"
+#endif
+#ifndef MyAppDirName
+  #define MyAppDirName "Random-Presenter-Selector"
+#endif
 
 [Setup]
 ; アプリケーション一意ID (プロジェクト固有のGUID)

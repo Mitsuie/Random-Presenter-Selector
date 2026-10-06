@@ -3,16 +3,9 @@
 保存先: %LOCALAPPDATA%\\Random-Presenter-Selector\\settings.json
 """
 import json
-import os
 from pathlib import Path
 from typing import Any, Optional
-from core.constants import APP_NAME
-
-
-def get_app_data_dir() -> Path:
-    """アプリの設定・ログを置くユーザーごとのディレクトリ（作成はしない）"""
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
-    return Path(base) / APP_NAME
+from core.utils import get_app_data_dir
 
 
 class Settings:

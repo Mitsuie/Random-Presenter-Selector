@@ -20,7 +20,10 @@ from pathlib import Path
 # ==============================================================================
 # プロジェクト基本設定
 # ==============================================================================
-APP_NAME = "Random-Presenter-Selector"       # アプリケーション識別名
+# アプリ名・バージョンは core/constants.py を唯一の定義元とする
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.constants import APP_NAME, APP_DISPLAY_NAME, APP_VERSION, COMPANY_NAME  # noqa: E402
+
 APP_EXE_NAME = f"{APP_NAME}.exe"             # 出力される実行ファイル名
 SPEC_FILENAME = "app.spec"                   # packaging/ 内の spec ファイル名
 ISS_FILENAME = "installer.iss"               # packaging/ 内の iss ファイル名
@@ -151,7 +154,7 @@ def main():
     os.chdir(root_dir)
 
     print("=" * 65)
-    print(f"  {APP_NAME} - Full-Auto Clean Build Engine")
+    print(f"  {APP_NAME} v{APP_VERSION} - Full-Auto Clean Build Engine")
     print("=" * 65)
 
     # クラウドストレージ同期（Google Drive, OneDrive等）のロックを回避するため
@@ -234,7 +237,15 @@ def main():
 
     if iscc_path and iss_file.exists():
         print(f"[INFO] Found Inno Setup compiler: {iscc_path}")
-        res = subprocess.run([str(iscc_path), str(iss_file)])
+        res = subprocess.run([
+            str(iscc_path),
+            f"/DMyAppName={APP_DISPLAY_NAME}",
+            f"/DMyAppVersion={APP_VERSION}",
+            f"/DMyAppPublisher={COMPANY_NAME}",
+            f"/DMyAppExeName={APP_EXE_NAME}",
+            f"/DMyAppDirName={APP_NAME}",
+            str(iss_file),
+        ])
         if res.returncode == 0:
             print("[INFO] Inno Setup installer compiled successfully!")
         else:

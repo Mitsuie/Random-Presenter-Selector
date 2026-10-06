@@ -43,7 +43,6 @@ dist/
 dist_installer/
 *.manifest
 *.spec
-!main.spec
 !packaging/app.spec
 
 # バイナリ実行ファイル（Git管理外としてリポジトリ肥大化を防止）
