@@ -24,7 +24,7 @@ class SelectorView(ctk.CTkFrame):
 
         title_label = ctk.CTkLabel(
             self.wait_frame,
-            text="演習投影学生指名プログラム",
+            text="学生指名",
             font=ctk.CTkFont(family=self.font_family, size=28, weight="bold")
         )
         title_label.pack(pady=(24, 14))
@@ -162,13 +162,24 @@ class SelectorView(ctk.CTkFrame):
         )
         self.undo_btn.pack(side=tk.LEFT, padx=(0, 16))
 
+        check_font = ctk.CTkFont(family=self.font_family, size=14)
         self.show_id_var = tk.BooleanVar(value=self.settings.get("show_student_id"))
         ctk.CTkCheckBox(
             tools_frame,
-            text="学籍番号を表示する",
+            text="学籍番号を表示",
             variable=self.show_id_var,
             command=self.on_toggle_show_id,
-            font=ctk.CTkFont(family=self.font_family, size=14)
+            font=check_font
+        ).pack(side=tk.LEFT, padx=(0, 12))
+
+        self.include_absent_var = tk.BooleanVar(value=self.settings.get("include_absent"))
+        self.manager.include_absent = bool(self.include_absent_var.get())
+        ctk.CTkCheckBox(
+            tools_frame,
+            text="欠席者も抽選対象にする",
+            variable=self.include_absent_var,
+            command=self.on_toggle_include_absent,
+            font=check_font
         ).pack(side=tk.LEFT)
 
         # 保存結果などの一時的なお知らせ
@@ -371,17 +382,31 @@ class SelectorView(ctk.CTkFrame):
         return True
 
     def update_stats_display(self, filename: str, stats: dict):
-        base_name = os.path.basename(filename)
-        self.file_name_label.configure(text=f"対象CSV: {base_name}")
+        # 同名のCSVが別フォルダにあっても区別できるよう、親フォルダ名も表示する
+        abs_path = os.path.abspath(filename)
+        display = os.path.join(os.path.basename(os.path.dirname(abs_path)), os.path.basename(abs_path))
+        self.file_name_label.configure(text=f"対象CSV: {display}")
         self.lbl_total_val.configure(text=f"{stats['total']} 名")
         self.lbl_pending_val.configure(text=f"{stats['pending']} 名")
-        self.lbl_done_val.configure(text=f"{stats['done']} 名")
+        done_text = f"{stats['done']} 名"
+        if stats.get("absent") and not self.manager.include_absent:
+            done_text += f"（うち欠席 {stats['absent']}）"
+        self.lbl_done_val.configure(text=done_text)
+
+    def refresh_stats(self):
+        if self.manager.filename:
+            self.update_stats_display(self.manager.filename, self.manager.get_statistics())
 
     def update_undo_button(self):
         self.undo_btn.configure(state="normal" if self.manager.last_record else "disabled")
 
     def on_toggle_show_id(self):
         self.settings.set("show_student_id", bool(self.show_id_var.get()))
+
+    def on_toggle_include_absent(self):
+        self.manager.include_absent = bool(self.include_absent_var.get())
+        self.settings.set("include_absent", self.manager.include_absent)
+        self.refresh_stats()
 
     def start_draw(self):
         if not self.manager.filename:
@@ -390,7 +415,11 @@ class SelectorView(ctk.CTkFrame):
 
         student = self.manager.draw_student()
         if not student:
-            messagebox.showinfo("情報", "投影実施可否が空欄の学生はいません（全員実施済みです）。")
+            if self.manager.include_absent:
+                msg = "抽選対象の学生はいません（全員が出席として記録済みです）。"
+            else:
+                msg = "投影実施可否が空欄の学生はいません（全員実施済みです）。"
+            messagebox.showinfo("情報", msg)
             return
 
         if self.show_id_var.get():

@@ -9,6 +9,9 @@ REQUIRED_CSV_COLUMNS = ['学籍番号', '投影実施可否']
 # 読み込みを試すエンコーディング（Excelで保存し直したCSVは cp932 になる）
 CSV_ENCODINGS = ['utf-8-sig', 'cp932']
 
+# 欠席の記録値（「欠席者を抽選対象に含める」設定で再抽選の対象になる）
+ABSENT_MARK = '×'
+
 class LotteryError(Exception):
     """学生指名ロジックのエラー基底クラス"""
     pass
@@ -23,6 +26,7 @@ class LotteryManager:
         self.data: List[Dict[str, Any]] = []
         self.current_selected_index: Optional[int] = None
         self.last_record: Optional[Dict[str, str]] = None
+        self.include_absent: bool = False
         self._loaded_mtime: Optional[float] = None
 
     def load_csv(self, filename: str) -> Dict[str, int]:
@@ -82,33 +86,25 @@ class LotteryManager:
         現在のデータの統計情報を取得する。
 
         Returns:
-            Dict[str, int]: {"total": 全人数, "pending": 未投影人数, "done": 実施済人数}
+            Dict[str, int]: {"total": 全人数, "pending": 抽選対象の人数,
+                             "done": 抽選対象外（実施済）の人数, "absent": 欠席（×）の人数}
         """
-        total = len(self.data)
-        pending = 0
-        done = 0
-
-        for row in self.data:
-            val = str(row.get('投影実施可否', '') or '').strip()
-            if not val:
-                pending += 1
-            else:
-                done += 1
-
+        pending = len(self.get_empty_indices())
         return {
-            "total": total,
+            "total": len(self.data),
             "pending": pending,
-            "done": done
+            "done": len(self.data) - pending,
+            "absent": sum(1 for i in range(len(self.data)) if self._value(i) == ABSENT_MARK),
         }
 
+    def _is_pending(self, index: int) -> bool:
+        """抽選対象かどうか（空欄、または欠席者を含める設定で欠席の場合）"""
+        value = self._value(index)
+        return not value or (self.include_absent and value == ABSENT_MARK)
+
     def get_empty_indices(self) -> List[int]:
-        """投影実施可否が空欄（未投影）のインデックスリストを取得する"""
-        indices = []
-        for i, row in enumerate(self.data):
-            val = str(row.get('投影実施可否', '') or '').strip()
-            if not val:
-                indices.append(i)
-        return indices
+        """抽選対象（投影実施可否が空欄。設定により欠席者も含む）のインデックスリストを取得する"""
+        return [i for i in range(len(self.data)) if self._is_pending(i)]
 
     def draw_student(self) -> Optional[Dict[str, Any]]:
         """
@@ -170,12 +166,13 @@ class LotteryManager:
         if self._is_modified_externally():
             target_idx = self._reload_and_find(student_id)
             reloaded = True
-            if self._value(target_idx):
+            if not self._is_pending(target_idx):
                 self.current_selected_index = None
                 raise LotteryError(
                     f"CSVが外部で変更され、学籍番号 {student_id} の学生にはすでに記録があります。記録は保存されていません。"
                 )
 
+        previous = self._value(target_idx)
         self._set_value_and_save(target_idx, result)
 
         self.current_selected_index = None
@@ -183,12 +180,13 @@ class LotteryManager:
             "student_id": student_id,
             "name": self.data[target_idx].get('学生氏名', ''),
             "value": result,
+            "previous": previous,
         }
         return reloaded
 
     def undo_last(self) -> Dict[str, str]:
         """
-        直前に記録した1件を取り消し（空欄に戻し）、CSVに保存する。
+        直前に記録した1件を取り消し（記録前の値に戻し）、CSVに保存する。
 
         Returns:
             Dict[str, str]: 取り消した記録 {"student_id", "name", "value"}
@@ -215,7 +213,7 @@ class LotteryManager:
                 f"CSVが外部で変更され、学籍番号 {student_id} の記録が変わっているため取り消せません。"
             )
 
-        self._set_value_and_save(target_idx, '')
+        self._set_value_and_save(target_idx, record.get("previous", ''))
         self.last_record = None
         return record
 

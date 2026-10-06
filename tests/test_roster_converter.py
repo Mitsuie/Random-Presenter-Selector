@@ -98,5 +98,62 @@ class TestRosterConverter(unittest.TestCase):
         with open(csv_path, mode="r", encoding="utf-8-sig") as f:
             self.assertEqual(f.read(), "既存の記録\n")
 
+    def _save_workbook(self, name, sheets):
+        """sheets: [(シート名, 行のリスト), ...] からExcelファイルを作る"""
+        path = os.path.join(self.temp_dir.name, name)
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        for title, rows in sheets:
+            ws = wb.create_sheet(title)
+            for row in rows:
+                ws.append(row)
+        wb.save(path)
+        return path
+
+    def test_header_variants_and_second_sheet(self):
+        """列名の表記ゆれ（半角アンダースコア・空白）を吸収し、2枚目以降のシートも探すこと"""
+        excel_path = self._save_workbook("variants.xlsx", [
+            ("表紙", [["演習クラス名簿"], ["担当", "電大"]]),
+            ("名簿", [
+                ["学籍番号 ", "学生氏名", "学生氏名_カナ"],
+                ["K001", "山田 太郎", "ヤマダ タロウ"],
+                ["K002", "佐藤 花子"],  # カナが空欄でも学生は抽出する
+            ]),
+        ])
+        csv_path = os.path.join(self.temp_dir.name, "out.csv")
+        result = convert_excel_to_csv(excel_path, csv_path)
+
+        self.assertEqual(result["sheet_name"], "名簿")
+        self.assertEqual(result["total_extracted"], 2)
+        with open(csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.reader(f))
+        self.assertEqual(rows[2], ["K002", "佐藤 花子", "", ""])
+
+    def test_duplicate_ids_are_counted(self):
+        excel_path = self._save_workbook("dup.xlsx", [("S", [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ"],
+            ["K001", "山田 太郎", "ヤマダ タロウ"],
+            ["K001", "山田 太郎", "ヤマダ タロウ"],
+        ])])
+        result = convert_excel_to_csv(excel_path, os.path.join(self.temp_dir.name, "out.csv"))
+        self.assertEqual(result["total_extracted"], 2)
+        self.assertEqual(result["duplicate_ids"], 1)
+
+    def test_error_message_lists_found_columns(self):
+        """必須列が見つからない場合、シート名と見つかった列名をメッセージに含めること"""
+        excel_path = self._save_workbook("bad.xlsx", [("一覧", [["番号", "氏名"], ["1", "山田"]])])
+        with self.assertRaises(RosterConversionError) as cm:
+            convert_excel_to_csv(excel_path, os.path.join(self.temp_dir.name, "out.csv"))
+        self.assertIn("一覧", str(cm.exception))
+        self.assertIn("氏名", str(cm.exception))
+
+    def test_xls_is_rejected_with_guidance(self):
+        xls_path = os.path.join(self.temp_dir.name, "old.xls")
+        with open(xls_path, "wb") as f:
+            f.write(b"dummy")
+        with self.assertRaises(RosterConversionError) as cm:
+            convert_excel_to_csv(xls_path, os.path.join(self.temp_dir.name, "out.csv"))
+        self.assertIn(".xlsx", str(cm.exception))
+
 if __name__ == "__main__":
     unittest.main()

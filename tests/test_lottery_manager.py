@@ -241,5 +241,33 @@ class TestLotteryManager(unittest.TestCase):
         self.manager.load_csv(self.csv_path)
         self.assertIsNone(self.manager.last_record)
 
+    def test_include_absent(self):
+        """欠席者を抽選対象に含める設定では、×の学生も抽選対象になること"""
+        self._write_csv(self.csv_path, [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ", "投影実施可否"],
+            ["K001", "山田 太郎", "ヤマダ タロウ", "○"],
+            ["K002", "佐藤 花子", "サトウ ハナコ", "×"],
+            ["K003", "鈴木 一郎", "スズキ イチロウ", ""],
+        ])
+        stats = self.manager.load_csv(self.csv_path)
+        self.assertEqual((stats["pending"], stats["done"], stats["absent"]), (1, 2, 1))
+
+        self.manager.include_absent = True
+        stats = self.manager.get_statistics()
+        self.assertEqual((stats["pending"], stats["done"], stats["absent"]), (2, 1, 1))
+        self.assertEqual(self.manager.get_empty_indices(), [1, 2])
+
+    def test_undo_restores_previous_value(self):
+        """欠席者を再抽選して記録した場合、取り消すと元の「×」に戻ること"""
+        self._write_csv(self.csv_path, [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ", "投影実施可否"],
+            ["K001", "山田 太郎", "ヤマダ タロウ", "×"],
+        ])
+        self.manager.load_csv(self.csv_path)
+        self.manager.include_absent = True
+        self.manager.save_result("○", index=0)
+        self.manager.undo_last()
+        self.assertEqual(self.manager.data[0]["投影実施可否"], "×")
+
 if __name__ == "__main__":
     unittest.main()

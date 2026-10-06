@@ -64,6 +64,9 @@ class MainWindow(ctk.CTk):
         # キーボード操作（学生指名画面のショートカット・F11 全画面）
         self.bind("<Key>", self._on_key)
 
+        # ウィンドウの×ボタンでも「終了」ボタンと同じ確認を出す
+        self.protocol("WM_DELETE_WINDOW", self.confirm_exit)
+
         # 前回使ったCSVがあれば自動で読み込む
         last_csv = self.settings.get("last_csv_path")
         if last_csv and os.path.exists(last_csv):
@@ -142,7 +145,11 @@ class MainWindow(ctk.CTk):
 
     def _on_update_checked(self, info: Optional[UpdateInfo]):
         """ワーカースレッドからの完了通知をメインスレッドへ安全にディスパッチ"""
-        self.after(0, lambda: self._apply_update_ui(info))
+        try:
+            self.after(0, lambda: self._apply_update_ui(info))
+        except (RuntimeError, tk.TclError):
+            # 確認中にウィンドウが閉じられた場合は何もしない
+            pass
 
     def _apply_update_ui(self, info: Optional[UpdateInfo]):
         """新バージョンが存在する場合、ヘッダーに更新可能ボタンを表示"""
