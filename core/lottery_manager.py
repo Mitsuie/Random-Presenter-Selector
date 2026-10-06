@@ -22,6 +22,7 @@ class LotteryManager:
         self.fieldnames: List[str] = []
         self.data: List[Dict[str, Any]] = []
         self.current_selected_index: Optional[int] = None
+        self.last_record: Optional[Dict[str, str]] = None
         self._loaded_mtime: Optional[float] = None
 
     def load_csv(self, filename: str) -> Dict[str, int]:
@@ -48,6 +49,7 @@ class LotteryManager:
         self.fieldnames = fieldnames
         self.data = records
         self.current_selected_index = None
+        self.last_record = None
         self._loaded_mtime = os.path.getmtime(filename)
 
         return self.get_statistics()
@@ -163,23 +165,76 @@ class LotteryManager:
         if not self.filename:
             raise LotteryError("対象のCSVファイルが設定されていません。")
 
+        student_id = self.data[target_idx].get('学籍番号')
         reloaded = False
         if self._is_modified_externally():
-            target_idx = self._reload_keeping_target(target_idx)
+            target_idx = self._reload_and_find(student_id)
             reloaded = True
+            if self._value(target_idx):
+                self.current_selected_index = None
+                raise LotteryError(
+                    f"CSVが外部で変更され、学籍番号 {student_id} の学生にはすでに記録があります。記録は保存されていません。"
+                )
 
-        # メモリ上のデータを更新（書き込みに失敗したら元に戻す）
-        row = self.data[target_idx]
+        self._set_value_and_save(target_idx, result)
+
+        self.current_selected_index = None
+        self.last_record = {
+            "student_id": student_id,
+            "name": self.data[target_idx].get('学生氏名', ''),
+            "value": result,
+        }
+        return reloaded
+
+    def undo_last(self) -> Dict[str, str]:
+        """
+        直前に記録した1件を取り消し（空欄に戻し）、CSVに保存する。
+
+        Returns:
+            Dict[str, str]: 取り消した記録 {"student_id", "name", "value"}
+
+        Raises:
+            LotteryError: 取り消せる記録がない、または外部で変更されていて取り消せない場合
+            PermissionError: ファイルがExcel等で開かれていて書き込めない場合
+        """
+        record = self.last_record
+        if not record or not self.filename:
+            raise LotteryError("取り消せる記録がありません。")
+
+        student_id = record["student_id"]
+        if self._is_modified_externally():
+            target_idx = self._reload_and_find(student_id)
+        else:
+            target_idx = self._find_index(student_id)
+            if target_idx is None:
+                raise LotteryError(f"学籍番号 {student_id} の学生が見つかりません。")
+
+        if self._value(target_idx) != record["value"]:
+            self.last_record = None
+            raise LotteryError(
+                f"CSVが外部で変更され、学籍番号 {student_id} の記録が変わっているため取り消せません。"
+            )
+
+        self._set_value_and_save(target_idx, '')
+        self.last_record = None
+        return record
+
+    def _value(self, index: int) -> str:
+        return str(self.data[index].get('投影実施可否', '') or '').strip()
+
+    def _find_index(self, student_id: Optional[str]) -> Optional[int]:
+        return next((i for i, r in enumerate(self.data) if r.get('学籍番号') == student_id), None)
+
+    def _set_value_and_save(self, index: int, value: str) -> None:
+        """メモリ上の記録を更新して保存する（書き込みに失敗したら元に戻す）"""
+        row = self.data[index]
         old_value = row.get('投影実施可否', '')
-        row['投影実施可否'] = result
+        row['投影実施可否'] = value
         try:
             self._write_csv()
         except BaseException:
             row['投影実施可否'] = old_value
             raise
-
-        self.current_selected_index = None
-        return reloaded
 
     def _is_modified_externally(self) -> bool:
         try:
@@ -187,30 +242,22 @@ class LotteryManager:
         except OSError:
             return False
 
-    def _reload_keeping_target(self, target_idx: int) -> int:
+    def _reload_and_find(self, student_id: Optional[str]) -> int:
         """
         CSVを読み込み直し、対象学生の新しいインデックスを学籍番号で探して返す。
         """
-        student_id = self.data[target_idx].get('学籍番号')
         fieldnames, records, encoding = self._read_csv(self.filename)
-        new_idx = next((i for i, r in enumerate(records) if r.get('学籍番号') == student_id), None)
-
         self.fieldnames = fieldnames
         self.data = records
         self.encoding = encoding
         self._loaded_mtime = os.path.getmtime(self.filename)
 
+        new_idx = self._find_index(student_id)
         if new_idx is None:
             self.current_selected_index = None
             raise LotteryError(
                 f"CSVが外部で変更され、学籍番号 {student_id} の学生が見つからなくなりました。記録は保存されていません。"
             )
-        if str(records[new_idx].get('投影実施可否', '') or '').strip():
-            self.current_selected_index = None
-            raise LotteryError(
-                f"CSVが外部で変更され、学籍番号 {student_id} の学生にはすでに記録があります。記録は保存されていません。"
-            )
-        self.current_selected_index = new_idx
         return new_idx
 
     def _write_csv(self) -> None:

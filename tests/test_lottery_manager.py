@@ -200,5 +200,46 @@ class TestLotteryManager(unittest.TestCase):
             self.assertEqual(list(csv.DictReader(f))[0]["投影実施可否"], "×")
         self.assertIsNone(self.manager.current_selected_index)
 
+    def test_undo_last(self):
+        """直前の記録を取り消すと未投影に戻り、CSVにも反映されること"""
+        self.manager.load_csv(self.csv_path)
+        self.assertIsNone(self.manager.last_record)
+        self.manager.save_result("×", index=0)
+        self.assertEqual(self.manager.last_record["student_id"], "K001")
+
+        record = self.manager.undo_last()
+        self.assertEqual(record["value"], "×")
+        self.assertIsNone(self.manager.last_record)
+        self.assertEqual(self.manager.get_empty_indices(), [0, 2])
+        with open(self.csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
+            self.assertEqual(list(csv.DictReader(f))[0]["投影実施可否"], "")
+
+        # 2回目は取り消せない
+        with self.assertRaises(LotteryError):
+            self.manager.undo_last()
+
+    def test_undo_last_after_external_change(self):
+        """外部で対象の記録が書き換えられていた場合は取り消さないこと"""
+        self.manager.load_csv(self.csv_path)
+        self.manager.save_result("○", index=0)
+        self._write_csv(self.csv_path, [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ", "投影実施可否"],
+            ["K001", "山田 太郎", "ヤマダ タロウ", "×"],
+        ])
+        os.utime(self.csv_path, (0, os.path.getmtime(self.csv_path) + 10))
+
+        with self.assertRaises(LotteryError):
+            self.manager.undo_last()
+        with open(self.csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
+            self.assertEqual(list(csv.DictReader(f))[0]["投影実施可否"], "×")
+        self.assertIsNone(self.manager.last_record)
+
+    def test_load_csv_resets_last_record(self):
+        """別のCSVを読み込むと、取り消し対象がリセットされること"""
+        self.manager.load_csv(self.csv_path)
+        self.manager.save_result("○", index=0)
+        self.manager.load_csv(self.csv_path)
+        self.assertIsNone(self.manager.last_record)
+
 if __name__ == "__main__":
     unittest.main()
