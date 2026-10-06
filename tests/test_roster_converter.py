@@ -2,6 +2,7 @@ import os
 import csv
 import tempfile
 import unittest
+from unittest.mock import patch
 import openpyxl
 from core.roster_converter import convert_excel_to_csv, RosterConversionError
 
@@ -77,6 +78,25 @@ class TestRosterConverter(unittest.TestCase):
 
         with self.assertRaises(RosterConversionError):
             convert_excel_to_csv(excel_path, output_csv)
+
+    def test_write_failure_keeps_existing_csv(self):
+        """書き込み途中で失敗しても、既存の出力先CSVが壊れないこと"""
+        excel_path = os.path.join(self.temp_dir.name, "roster.xlsx")
+        csv_path = os.path.join(self.temp_dir.name, "output.csv")
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["学籍番号", "学生氏名", "学生氏名＿カナ"])
+        ws.append(["K001", "山田 太郎", "ヤマダ タロウ"])
+        wb.save(excel_path)
+        with open(csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
+            f.write("既存の記録\n")
+
+        with patch("csv.writer", side_effect=OSError("disk full")):
+            with self.assertRaises(RosterConversionError):
+                convert_excel_to_csv(excel_path, csv_path)
+
+        with open(csv_path, mode="r", encoding="utf-8-sig") as f:
+            self.assertEqual(f.read(), "既存の記録\n")
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@ import os
 import csv
 import tempfile
 import unittest
+from unittest.mock import patch
 from core.lottery_manager import LotteryManager, LotteryError
 
 class TestLotteryManager(unittest.TestCase):
@@ -115,6 +116,88 @@ class TestLotteryManager(unittest.TestCase):
         self.assertIsNotNone(self.manager.current_selected_index)
 
         self.manager.clear_selection()
+        self.assertIsNone(self.manager.current_selected_index)
+
+    def test_save_result_write_failure_keeps_file_and_state(self):
+        """書き込み途中で失敗しても、元のCSVとメモリ上の状態が変わらないこと"""
+        self.manager.load_csv(self.csv_path)
+        self.manager.draw_student()
+        with open(self.csv_path, mode="rb") as f:
+            original_bytes = f.read()
+
+        with patch("csv.DictWriter.writerows", side_effect=OSError("disk full")):
+            with self.assertRaises(LotteryError):
+                self.manager.save_result("○")
+
+        with open(self.csv_path, mode="rb") as f:
+            self.assertEqual(f.read(), original_bytes)
+        self.assertEqual(self.manager.get_statistics()["pending"], 2)
+        self.assertEqual(self.manager.get_empty_indices(), [0, 2])
+        # 一時ファイルが残らないこと
+        self.assertEqual(os.listdir(self.temp_dir.name), ["roster.csv"])
+
+    def test_save_result_permission_error_rolls_back(self):
+        """Excel等で開かれていて置き換えに失敗した場合も、メモリ上の状態が元に戻ること"""
+        self.manager.load_csv(self.csv_path)
+        self.manager.draw_student()
+        with patch("os.replace", side_effect=PermissionError("locked")):
+            with self.assertRaises(PermissionError):
+                self.manager.save_result("○")
+        self.assertEqual(self.manager.get_statistics()["pending"], 2)
+        self.assertIsNotNone(self.manager.current_selected_index)
+
+    def test_cp932_csv_round_trip(self):
+        """Excelで保存し直した cp932 のCSVを読み込み、cp932 のまま保存できること"""
+        sjis_csv = os.path.join(self.temp_dir.name, "sjis.csv")
+        with open(sjis_csv, mode="w", encoding="cp932", newline="") as f:
+            csv.writer(f).writerows(self.initial_data)
+
+        stats = self.manager.load_csv(sjis_csv)
+        self.assertEqual(stats["pending"], 2)
+        self.assertEqual(self.manager.encoding, "cp932")
+
+        self.manager.save_result("×", index=0)
+        with open(sjis_csv, mode="r", encoding="cp932", newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual(rows[0]["投影実施可否"], "×")
+        self.assertEqual(rows[0]["学生氏名"], "山田 太郎")
+
+    def test_save_result_after_external_modification(self):
+        """起動中にCSVが外部で変更された場合、読み込み直してから記録し、外部の変更を失わないこと"""
+        self.manager.load_csv(self.csv_path)
+        target = next(i for i in self.manager.get_empty_indices())  # K001
+        self.manager.current_selected_index = target
+
+        # 外部編集: K003 に記録を追加し、行の順番も入れ替える
+        self._write_csv(self.csv_path, [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ", "投影実施可否"],
+            ["K003", "鈴木 一郎", "スズキ イチロウ", "×"],
+            ["K002", "佐藤 花子", "サトウ ハナコ", "○"],
+            ["K001", "山田 太郎", "ヤマダ タロウ", ""],
+        ])
+        os.utime(self.csv_path, (0, os.path.getmtime(self.csv_path) + 10))
+
+        reloaded = self.manager.save_result("○")
+        self.assertTrue(reloaded)
+
+        with open(self.csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
+            rows = {r["学籍番号"]: r["投影実施可否"] for r in csv.DictReader(f)}
+        self.assertEqual(rows, {"K001": "○", "K002": "○", "K003": "×"})
+
+    def test_save_result_external_modification_already_recorded(self):
+        """外部で対象学生にすでに記録が付いていた場合は、上書きせずにエラーにすること"""
+        self.manager.load_csv(self.csv_path)
+        self.manager.current_selected_index = 0  # K001
+        self._write_csv(self.csv_path, [
+            ["学籍番号", "学生氏名", "学生氏名＿カナ", "投影実施可否"],
+            ["K001", "山田 太郎", "ヤマダ タロウ", "×"],
+        ])
+        os.utime(self.csv_path, (0, os.path.getmtime(self.csv_path) + 10))
+
+        with self.assertRaises(LotteryError):
+            self.manager.save_result("○")
+        with open(self.csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
+            self.assertEqual(list(csv.DictReader(f))[0]["投影実施可否"], "×")
         self.assertIsNone(self.manager.current_selected_index)
 
 if __name__ == "__main__":

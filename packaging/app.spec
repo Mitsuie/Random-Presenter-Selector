@@ -29,6 +29,10 @@ datas += ctk_ret[0]
 binaries += ctk_ret[1]
 hiddenimports += ctk_ret[2]
 
+# ウィンドウアイコン（実行時に get_resource_path("packaging/app_icon.ico") で参照）
+if os.path.exists(icon_path):
+    datas.append((icon_path, 'packaging'))
+
 # assets ディレクトリが存在する場合は同梱
 assets_dir = os.path.join(project_root, 'assets')
 if os.path.exists(assets_dir):

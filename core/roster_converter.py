@@ -1,6 +1,7 @@
 import os
 import csv
 import openpyxl
+from core.utils import atomic_write_text
 
 REQUIRED_COLUMNS = ['学籍番号', '学生氏名', '学生氏名＿カナ']
 OUTPUT_HEADER = ['学籍番号', '学生氏名', '学生氏名＿カナ', '投影実施可否']
@@ -62,20 +63,23 @@ def convert_excel_to_csv(excel_file_path: str, output_csv_path: str) -> dict:
         if out_dir and not os.path.exists(out_dir):
             os.makedirs(out_dir, exist_ok=True)
 
-        extracted_count = 0
-        with open(output_csv_path, mode='w', encoding='utf-8-sig', newline='') as f:
+        rows = []
+        for row in row_iter:
+            if not row or len(row) <= max(col_id, col_name, col_kana):
+                continue
+            val_id = row[col_id]
+            if val_id is not None and str(val_id).strip() != '':
+                val_name = row[col_name] if row[col_name] is not None else ''
+                val_kana = row[col_kana] if row[col_kana] is not None else ''
+                rows.append([str(val_id).strip(), str(val_name).strip(), str(val_kana).strip(), ''])
+
+        def _write(f):
             writer = csv.writer(f)
             writer.writerow(OUTPUT_HEADER)
+            writer.writerows(rows)
 
-            for row in row_iter:
-                if not row or len(row) <= max(col_id, col_name, col_kana):
-                    continue
-                val_id = row[col_id]
-                if val_id is not None and str(val_id).strip() != '':
-                    val_name = row[col_name] if row[col_name] is not None else ''
-                    val_kana = row[col_kana] if row[col_kana] is not None else ''
-                    writer.writerow([str(val_id).strip(), str(val_name).strip(), str(val_kana).strip(), ''])
-                    extracted_count += 1
+        atomic_write_text(output_csv_path, _write)
+        extracted_count = len(rows)
 
         return {
             "total_extracted": extracted_count,

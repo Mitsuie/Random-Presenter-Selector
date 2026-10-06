@@ -135,7 +135,9 @@ class UpdateDialog:
             except InterruptedError:
                 self.dialog.after(0, self._on_cancelled)
             except Exception as e:
-                self.dialog.after(0, lambda: self._on_failed(str(e)))
+                # except を抜けると e は削除されるため、メインスレッドで使う値を先に取り出す
+                err = str(e)
+                self.dialog.after(0, lambda: self._on_failed(err))
 
         self.download_thread = threading.Thread(target=_worker, daemon=True)
         self.download_thread.start()
