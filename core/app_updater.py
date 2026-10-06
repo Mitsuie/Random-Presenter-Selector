@@ -7,6 +7,7 @@ import sys
 import json
 import urllib.request
 import urllib.error
+import urllib.parse
 import subprocess
 import tempfile
 import threading
@@ -78,11 +79,15 @@ def fetch_latest_release_info(
     repo_owner: str,
     repo_name: str,
     current_version: str,
-    timeout_sec: float = 5.0
+    timeout_sec: float = 5.0,
+    installer_name_template: Optional[str] = None
 ) -> Optional[UpdateInfo]:
     """
     GitHub Releases API から最新バージョン情報を取得（同期処理）
     ※ ネットワークエラーやオフライン時は例外を出さず None を返します。
+
+    installer_name_template（例: "MyApp_Setup_v{version}.exe"）を指定した場合、
+    名前が完全に一致するアセットだけをインストーラーとして扱います。
     """
     url = GITHUB_API_LATEST_RELEASE_URL.format(owner=repo_owner, repo=repo_name)
     headers = {
@@ -111,10 +116,12 @@ def fetch_latest_release_info(
     installer_name = None
     installer_size = 0
 
+    expected_name = installer_name_template.format(version=version_str) if installer_name_template else None
     assets = data.get("assets", [])
     for asset in assets:
         name = asset.get("name", "")
-        if name.lower().endswith(".exe"):
+        matched = (name == expected_name) if expected_name else name.lower().endswith(".exe")
+        if matched:
             installer_url = asset.get("browser_download_url")
             installer_name = name
             installer_size = asset.get("size", 0)
@@ -141,13 +148,16 @@ def check_for_updates_async(
     repo_name: str,
     current_version: str,
     on_complete: Callable[[Optional[UpdateInfo]], None],
-    timeout_sec: float = 5.0
+    timeout_sec: float = 5.0,
+    installer_name_template: Optional[str] = None
 ) -> threading.Thread:
     """
     最新バージョンをバックグラウンドスレッドで非同期確認
     """
     def _worker():
-        info = fetch_latest_release_info(repo_owner, repo_name, current_version, timeout_sec)
+        info = fetch_latest_release_info(
+            repo_owner, repo_name, current_version, timeout_sec, installer_name_template
+        )
         on_complete(info)
 
     thread = threading.Thread(target=_worker, daemon=True, name="UpdateCheckWorker")
@@ -155,36 +165,65 @@ def check_for_updates_async(
     return thread
 
 
+class UpdateError(Exception):
+    """ダウンロードしたインストーラーの検証に失敗した場合のエラー"""
+    pass
+
+
+def _is_allowed_download_host(url: str) -> bool:
+    """GitHub のリリースアセット配信元（リダイレクト先を含む）かどうか"""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host == "github.com" or host.endswith(".githubusercontent.com"))
+
+
 def download_installer(
     download_url: str,
     target_filename: Optional[str] = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
-    chunk_size: int = 65536
+    chunk_size: int = 65536,
+    expected_size: int = 0
 ) -> str:
     """
-    インストーラーを %TEMP% 配下にストリーミングダウンロード
+    インストーラーを %TEMP% 配下の専用ディレクトリにストリーミングダウンロード
+
+    ダウンロード元が GitHub であること、およびサイズが Content-Length / expected_size
+    （API が返すアセットサイズ）と一致することを検証します。
+
     戻り値: 保存されたインストーラーの絶対パス
+    Raises:
+        UpdateError: ダウンロード元やサイズの検証に失敗した場合
+        InterruptedError: キャンセルされた場合
     """
-    temp_dir = tempfile.gettempdir()
+    if not _is_allowed_download_host(download_url):
+        raise UpdateError(f"想定外のダウンロード元です: {download_url}")
+
     if not target_filename:
         target_filename = os.path.basename(download_url.split("?")[0]) or "Setup_Update.exe"
-    save_path = os.path.join(temp_dir, target_filename)
+    target_filename = os.path.basename(target_filename)
+    save_dir = tempfile.mkdtemp(prefix="app_update_")
+    save_path = os.path.join(save_dir, target_filename)
+
+    def _discard():
+        for remove, target in ((os.remove, save_path), (os.rmdir, save_dir)):
+            try:
+                remove(target)
+            except OSError:
+                pass
 
     req = urllib.request.Request(download_url, headers={"User-Agent": "AppUpdater/1.0"})
     with urllib.request.urlopen(req, timeout=30.0) as resp:
-        total_size = int(resp.headers.get("Content-Length", 0))
+        if not _is_allowed_download_host(resp.geturl()):
+            raise UpdateError(f"想定外のダウンロード元にリダイレクトされました: {resp.geturl()}")
+        total_size = int(resp.headers.get("Content-Length", 0) or 0)
         downloaded = 0
 
         with open(save_path, "wb") as f:
             while True:
                 if cancel_event and cancel_event.is_set():
                     f.close()
-                    if os.path.exists(save_path):
-                        try:
-                            os.remove(save_path)
-                        except OSError:
-                            pass
+                    _discard()
                     raise InterruptedError("Download was cancelled by user.")
 
                 chunk = resp.read(chunk_size)
@@ -196,12 +235,20 @@ def download_installer(
                 if progress_callback:
                     progress_callback(downloaded, total_size)
 
+    for label, size in (("Content-Length", total_size), ("リリース情報", expected_size)):
+        if size > 0 and downloaded != size:
+            _discard()
+            raise UpdateError(
+                f"ダウンロードしたファイルのサイズが一致しません（{label}: {size} バイト / 実際: {downloaded} バイト）。"
+            )
+
     return save_path
 
 
-def launch_installer_and_exit(installer_path: str) -> None:
+def launch_installer(installer_path: str) -> None:
     """
-    インストーラーを独立プロセスで起動し、現在のアプリケーション自身を正常終了する
+    インストーラーを独立プロセスで起動する。
+    呼び出し側は起動後にアプリを終了すること（Inno Setup の CloseApplications でも検知される）。
     """
     abs_path = os.path.abspath(installer_path)
     if not os.path.exists(abs_path):
@@ -216,5 +263,3 @@ def launch_installer_and_exit(installer_path: str) -> None:
         )
     else:
         subprocess.Popen([abs_path], close_fds=True)
-
-    sys.exit(0)

@@ -12,3 +12,6 @@ GITHUB_REPO = "Random-Presenter-Selector"
 
 COMPANY_NAME = "Mitsuie"
 APP_DESCRIPTION = "演習投影学生指名・名簿変換統合管理システム"
+
+# GitHub Releases に添付するインストーラーのファイル名（installer.iss の OutputBaseFilename と一致させる）
+INSTALLER_NAME_TEMPLATE = APP_NAME + "_Setup_v{version}.exe"

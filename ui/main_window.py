@@ -1,12 +1,14 @@
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
 import customtkinter as ctk
-from core.constants import APP_VERSION, APP_DISPLAY_NAME, GITHUB_OWNER, GITHUB_REPO
+from core.constants import APP_VERSION, APP_DISPLAY_NAME, GITHUB_OWNER, GITHUB_REPO, INSTALLER_NAME_TEMPLATE
 from core.app_updater import check_for_updates_async, UpdateInfo
-from core.utils import get_resource_path
+from core.utils import get_resource_path, get_app_data_dir
 from core.settings import Settings
+from core.app_logging import LOG_FILENAME
 from ui.update_dialog import UpdateDialog
 from ui.font_config import get_font_family
 from ui.selector_view import SelectorView
@@ -134,7 +136,8 @@ class MainWindow(ctk.CTk):
             repo_owner=GITHUB_OWNER,
             repo_name=GITHUB_REPO,
             current_version=APP_VERSION,
-            on_complete=self._on_update_checked
+            on_complete=self._on_update_checked,
+            installer_name_template=INSTALLER_NAME_TEMPLATE
         )
 
     def _on_update_checked(self, info: Optional[UpdateInfo]):
@@ -157,6 +160,15 @@ class MainWindow(ctk.CTk):
                 )
                 # 外観切替ボタンの左隣（RIGHTパック順）に配置
                 self.update_btn.pack(side=tk.RIGHT, padx=(6, 6), pady=10)
+
+    def report_callback_exception(self, exc, val, tb):
+        """ボタン操作などのコールバック中に起きた例外を、ログに残して利用者に知らせる"""
+        logging.error("操作中に予期しないエラーが発生しました", exc_info=(exc, val, tb))
+        log_path = get_app_data_dir() / LOG_FILENAME
+        messagebox.showerror(
+            "予期しないエラー",
+            f"操作中に予期しないエラーが発生しました:\n{val}\n\n詳細はログファイルに記録しました:\n{log_path}"
+        )
 
     def confirm_exit(self):
         """プログラム終了の確認ダイアログ"""

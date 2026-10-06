@@ -7,6 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Callable, IO
+from core.constants import APP_NAME
 
 
 def get_resource_path(relative_path: str) -> Path:
@@ -22,6 +23,12 @@ def get_resource_path(relative_path: str) -> Path:
         base_path = Path(__file__).resolve().parent.parent
 
     return (base_path / relative_path).resolve()
+
+
+def get_app_data_dir() -> Path:
+    """アプリの設定・ログを置くユーザーごとのディレクトリ（作成はしない）"""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / APP_NAME
 
 
 def atomic_write_text(path: str, write_func: Callable[[IO[str]], None], encoding: str = 'utf-8-sig') -> None:

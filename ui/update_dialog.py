@@ -3,105 +3,121 @@
 新バージョンのリリースノート表示、インストーラーの非同期ダウンロード、
 進捗表示、および自動インストール・再起動実行を担当します。
 """
+import logging
 import os
 import sys
 import threading
 import webbrowser
 import subprocess
-import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 from typing import Optional
-from core.app_updater import UpdateInfo, download_installer, launch_installer_and_exit
+import customtkinter as ctk
+from core.app_updater import UpdateInfo, download_installer, launch_installer
+from ui.font_config import get_font_family
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateDialog:
     """新バージョン案内・ダウンロード・更新適用ダイアログ"""
 
-    def __init__(self, parent: tk.Widget, update_info: UpdateInfo, current_version: str):
+    WIDTH = 680
+    HEIGHT = 560
+
+    def __init__(self, parent: ctk.CTk, update_info: UpdateInfo, current_version: str):
         self.parent = parent
         self.update_info = update_info
         self.current_version = current_version
         self.cancel_event = threading.Event()
         self.download_thread: Optional[threading.Thread] = None
+        self.font_family = get_font_family()
+        self._last_pct = -1
 
-        self.dialog = tk.Toplevel(parent)
+        self.dialog = ctk.CTkToplevel(parent)
         self.dialog.title("アプリケーション アップデート")
-        self.dialog.geometry("680x560")
         self.dialog.minsize(560, 440)
         self.dialog.transient(parent)
-        self.dialog.grab_set()
 
         # 画面中央配置
-        self.dialog.update_idletasks()
-        w, h = 680, 560
-        px = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
-        py = parent.winfo_rooty() + (parent.winfo_height() - h) // 2
-        self.dialog.geometry(f"{w}x{h}+{max(0, px)}+{max(0, py)}")
+        px = parent.winfo_rootx() + (parent.winfo_width() - self.WIDTH) // 2
+        py = parent.winfo_rooty() + (parent.winfo_height() - self.HEIGHT) // 2
+        self.dialog.geometry(f"{self.WIDTH}x{self.HEIGHT}+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_close)
+        # CTkToplevel は表示直後に grab できない場合があるため、少し待ってからモーダル化する
+        self.dialog.after(100, self._make_modal)
+
+    def _make_modal(self):
+        try:
+            self.dialog.grab_set()
+            self.dialog.focus_set()
+        except Exception:
+            pass
+
+    def _font(self, size: int, bold: bool = False) -> ctk.CTkFont:
+        return ctk.CTkFont(family=self.font_family, size=size, weight="bold" if bold else "normal")
 
     def _build_ui(self) -> None:
         # 1. 最下部ボタンバー (確実に表示されるよう side=BOTTOM で優先配置)
-        btn_bar = tk.Frame(self.dialog)
-        btn_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 16))
+        btn_bar = ctk.CTkFrame(self.dialog, fg_color="transparent")
+        btn_bar.pack(side="bottom", fill="x", padx=20, pady=(0, 16))
 
-        self.browser_btn = tk.Button(btn_bar, text="GitHubで確認", command=self._open_browser, padx=12, pady=6)
-        self.browser_btn.pack(side=tk.LEFT)
+        neutral = dict(fg_color=("gray80", "gray28"), hover_color=("gray70", "gray38"), text_color=("black", "white"))
 
-        self.close_btn = tk.Button(btn_bar, text="閉じる", command=self._on_close, padx=14, pady=6)
-        self.close_btn.pack(side=tk.RIGHT, padx=(8, 0))
+        self.browser_btn = ctk.CTkButton(
+            btn_bar, text="GitHubで確認", command=self._open_browser, font=self._font(14), **neutral
+        )
+        self.browser_btn.pack(side="left")
+
+        self.close_btn = ctk.CTkButton(
+            btn_bar, text="閉じる", command=self._on_close, font=self._font(14), width=110, **neutral
+        )
+        self.close_btn.pack(side="right", padx=(8, 0))
 
         if self.update_info.installer_download_url:
-            self.update_btn = tk.Button(
+            self.update_btn = ctk.CTkButton(
                 btn_bar,
                 text="今すぐアップデート (自動インストール)",
                 command=self._start_download,
-                bg="#0969da",
-                fg="#ffffff",
-                font=("", 9, "bold"),
-                padx=16,
-                pady=6
+                font=self._font(14, bold=True),
+                fg_color=("#0969da", "#1f6feb"),
+                hover_color=("#054da7", "#1158c7"),
+                text_color="white"
             )
-            self.update_btn.pack(side=tk.RIGHT)
+            self.update_btn.pack(side="right")
         else:
             self.update_btn = None
 
         # 2. ダウンロード進捗領域
-        self.progress_frame = tk.Frame(self.dialog)
-        self.progress_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 10))
+        self.progress_frame = ctk.CTkFrame(self.dialog, fg_color="transparent")
 
-        self.progress_lbl = tk.Label(self.progress_frame, text="", fg="#57606a", anchor="w")
-        self.progress_lbl.pack(fill=tk.X, pady=(0, 2))
+        self.progress_lbl = ctk.CTkLabel(
+            self.progress_frame, text="", anchor="w", font=self._font(13), text_color=("gray35", "gray70")
+        )
+        self.progress_lbl.pack(fill="x", pady=(0, 2))
 
-        self.progress_bar = ttk.Progressbar(self.progress_frame, orient="horizontal", mode="determinate")
-        self.progress_bar.pack(fill=tk.X)
-        self.progress_frame.pack_forget()  # 開始まで非表示
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(fill="x")
 
         # 3. メインコンテンツ（ヘッダー ＆ リリースノート）
-        container = tk.Frame(self.dialog)
-        container.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=(16, 10))
+        container = ctk.CTkFrame(self.dialog, fg_color="transparent")
+        container.pack(side="top", fill="both", expand=True, padx=20, pady=(16, 10))
 
-        title_lbl = tk.Label(container, text="🚀 新バージョンが利用可能です！", font=("", 13, "bold"), anchor="w")
-        title_lbl.pack(fill=tk.X)
+        ctk.CTkLabel(container, text="🚀 新バージョンが利用可能です！", font=self._font(18, bold=True), anchor="w").pack(fill="x")
 
         ver_text = f"現在のバージョン: v{self.current_version}  ➔  最新バージョン: v{self.update_info.version}"
         if self.update_info.installer_size > 0:
             ver_text += f" ({self.update_info.installer_size / (1024*1024):.1f} MB)"
-        tk.Label(container, text=ver_text, fg="#0969da", font=("", 10, "bold"), anchor="w").pack(fill=tk.X, pady=(4, 10))
+        ctk.CTkLabel(
+            container, text=ver_text, font=self._font(14, bold=True), text_color=("#0969da", "#58a6ff"), anchor="w"
+        ).pack(fill="x", pady=(4, 10))
 
-        tk.Label(container, text="リリースノート:", font=("", 9, "bold"), anchor="w").pack(fill=tk.X)
+        ctk.CTkLabel(container, text="リリースノート:", font=self._font(13, bold=True), anchor="w").pack(fill="x")
 
-        text_frame = tk.Frame(container)
-        text_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
-
-        scroll = ttk.Scrollbar(text_frame)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.notes_text = tk.Text(text_frame, wrap="word", height=8, yscrollcommand=scroll.set, padx=8, pady=8)
-        self.notes_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scroll.config(command=self.notes_text.yview)
-
+        self.notes_text = ctk.CTkTextbox(container, wrap="word", font=self._font(13))
+        self.notes_text.pack(fill="both", expand=True, pady=(4, 0))
         self.notes_text.insert("1.0", self.update_info.release_notes.strip() or "詳細はGitHubをご覧ください。")
         self.notes_text.configure(state="disabled")
 
@@ -114,27 +130,35 @@ class UpdateDialog:
             return
         self.update_btn.configure(state="disabled", text="ダウンロード中...")
         self.close_btn.configure(text="キャンセル")
-        self.progress_frame.pack(fill=tk.X, padx=20, pady=(0, 10))
-        self.progress_bar["value"] = 0
+        self.progress_frame.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+        self.progress_bar.set(0)
+        self._last_pct = -1
 
         def _worker():
             try:
                 def _on_prog(dl, total):
-                    if total > 0:
-                        pct = (dl / total) * 100
-                        msg = f"ダウンロード中: {dl/(1024*1024):.1f} MB / {total/(1024*1024):.1f} MB ({pct:.1f}%)"
-                        self.dialog.after(0, lambda: self._update_prog_ui(pct, msg))
+                    if total <= 0:
+                        return
+                    pct = int(dl * 100 / total)
+                    # 進捗表示の更新は1%ごとに間引く（イベントキューを溢れさせない）
+                    if pct == self._last_pct:
+                        return
+                    self._last_pct = pct
+                    msg = f"ダウンロード中: {dl/(1024*1024):.1f} MB / {total/(1024*1024):.1f} MB ({pct}%)"
+                    self.dialog.after(0, lambda: self._update_prog_ui(pct, msg))
 
                 path = download_installer(
                     self.update_info.installer_download_url,
                     target_filename=self.update_info.installer_name,
                     progress_callback=_on_prog,
-                    cancel_event=self.cancel_event
+                    cancel_event=self.cancel_event,
+                    expected_size=self.update_info.installer_size
                 )
                 self.dialog.after(0, lambda: self._on_download_complete(path))
             except InterruptedError:
                 self.dialog.after(0, self._on_cancelled)
             except Exception as e:
+                logger.warning("更新のダウンロードに失敗しました", exc_info=True)
                 # except を抜けると e は削除されるため、メインスレッドで使う値を先に取り出す
                 err = str(e)
                 self.dialog.after(0, lambda: self._on_failed(err))
@@ -143,17 +167,17 @@ class UpdateDialog:
         self.download_thread.start()
 
     def _update_prog_ui(self, pct, msg):
-        self.progress_bar["value"] = pct
+        self.progress_bar.set(pct / 100)
         self.progress_lbl.configure(text=msg)
 
     def _on_download_complete(self, path: str):
         file_name = os.path.basename(path)
         self.progress_lbl.configure(text=f"✓ ダウンロード完了: {file_name}")
-        self.progress_bar["value"] = 100
+        self.progress_bar.set(1)
 
         self.close_btn.configure(text="後で (閉じる)")
         if self.update_btn:
-            self.update_btn.configure(state="normal", text="今すぐインストール", command=lambda: launch_installer_and_exit(path))
+            self.update_btn.configure(state="normal", text="今すぐインストール", command=lambda: self._install(path))
         self.browser_btn.configure(text="保存先フォルダを開く", command=lambda: self._open_folder(path))
 
         if messagebox.askyesno(
@@ -164,7 +188,18 @@ class UpdateDialog:
             "・「いいえ」: 起動せず、後でダイアログから実行",
             parent=self.dialog
         ):
-            launch_installer_and_exit(path)
+            self._install(path)
+
+    def _install(self, path: str):
+        """インストーラーを起動し、アプリを終了する"""
+        try:
+            launch_installer(path)
+        except Exception as e:
+            logger.exception("インストーラーを起動できませんでした")
+            messagebox.showerror("エラー", f"インストーラーを起動できませんでした:\n{e}", parent=self.dialog)
+            return
+        logger.info("インストーラーを起動して終了します: %s", path)
+        self.parent.destroy()
 
     def _open_folder(self, file_path: str):
         if sys.platform == "win32":
