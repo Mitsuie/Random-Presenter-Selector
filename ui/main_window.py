@@ -1,3 +1,4 @@
+import os
 import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
@@ -5,6 +6,7 @@ import customtkinter as ctk
 from core.constants import APP_VERSION, APP_DISPLAY_NAME, GITHUB_OWNER, GITHUB_REPO
 from core.app_updater import check_for_updates_async, UpdateInfo
 from core.utils import get_resource_path
+from core.settings import Settings
 from ui.update_dialog import UpdateDialog
 from ui.font_config import get_font_family
 from ui.selector_view import SelectorView
@@ -16,13 +18,17 @@ class MainWindow(ctk.CTk):
     MODE_SELECTOR = "🎯 学生指名"
     MODE_CONVERTER = "📋 名簿変換"
 
+    WINDOW_WIDTH = 720
+    WINDOW_HEIGHT = 620
+
     def __init__(self, initial_mode=None):
         super().__init__()
+        self.settings = Settings()
 
-        # 基本設定
+        # 基本設定（F11 で全画面。リサイズも可能だが現在のサイズより小さくはしない）
         self.title(APP_DISPLAY_NAME)
-        self.geometry("720x620")
-        self.resizable(False, False)
+        self.geometry(f"{self.WINDOW_WIDTH}x{self.WINDOW_HEIGHT}")
+        self.minsize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
 
         # アプリアイコン設定
         icon_path = get_resource_path("packaging/app_icon.ico")
@@ -32,8 +38,8 @@ class MainWindow(ctk.CTk):
             except Exception:
                 pass
 
-        # 初期外観モード
-        self.current_theme = "Light"
+        # 初期外観モード（前回の設定を復元）
+        self.current_theme = "Dark" if self.settings.get("theme") == "Dark" else "Light"
         ctk.set_appearance_mode(self.current_theme)
         ctk.set_default_color_theme("blue")
 
@@ -53,13 +59,21 @@ class MainWindow(ctk.CTk):
         # ウィンドウを画面中央に配置
         self.center_window()
 
+        # キーボード操作（学生指名画面のショートカット・F11 全画面）
+        self.bind("<Key>", self._on_key)
+
+        # 前回使ったCSVがあれば自動で読み込む
+        last_csv = self.settings.get("last_csv_path")
+        if last_csv and os.path.exists(last_csv):
+            self.selector_view.load_csv_file(last_csv, silent=True)
+
         # バックグラウンドで非同期更新確認（起動遅延ゼロ）
         self._start_update_check()
 
     def center_window(self):
         self.update_idletasks()
-        w = 720
-        h = 620
+        w = self.WINDOW_WIDTH
+        h = self.WINDOW_HEIGHT
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         x = (sw - w) // 2
@@ -155,7 +169,7 @@ class MainWindow(ctk.CTk):
         self.content_container.pack(fill="both", expand=True)
 
         # 学生指名ビュー
-        self.selector_view = SelectorView(self.content_container)
+        self.selector_view = SelectorView(self.content_container, settings=self.settings)
 
         # 名簿変換ビュー
         self.converter_view = ConverterView(
@@ -191,3 +205,13 @@ class MainWindow(ctk.CTk):
         else:
             self.current_theme = "Light"
             ctk.set_appearance_mode("Light")
+        self.settings.set("theme", self.current_theme)
+
+    def _on_key(self, event):
+        if event.keysym == "F11":
+            self.attributes("-fullscreen", not self.attributes("-fullscreen"))
+            return
+        if self.mode_segment.get() == self.MODE_SELECTOR and self.selector_view.handle_key(event.keysym):
+            return
+        if event.keysym == "Escape" and self.attributes("-fullscreen"):
+            self.attributes("-fullscreen", False)
