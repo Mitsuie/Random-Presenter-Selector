@@ -162,16 +162,6 @@ class SelectorView(ctk.CTkFrame):
         )
         self.undo_btn.pack(side=tk.LEFT, padx=(0, 16))
 
-        check_font = ctk.CTkFont(family=self.font_family, size=14)
-        self.show_id_var = tk.BooleanVar(value=self.settings.get("show_student_id"))
-        ctk.CTkCheckBox(
-            tools_frame,
-            text="学籍番号を表示",
-            variable=self.show_id_var,
-            command=self.on_toggle_show_id,
-            font=check_font
-        ).pack(side=tk.LEFT, padx=(0, 12))
-
         self.include_absent_var = tk.BooleanVar(value=self.settings.get("include_absent"))
         self.manager.include_absent = bool(self.include_absent_var.get())
         ctk.CTkCheckBox(
@@ -179,7 +169,7 @@ class SelectorView(ctk.CTkFrame):
             text="欠席者も抽選対象にする",
             variable=self.include_absent_var,
             command=self.on_toggle_include_absent,
-            font=check_font
+            font=ctk.CTkFont(family=self.font_family, size=14)
         ).pack(side=tk.LEFT)
 
         # 保存結果などの一時的なお知らせ
@@ -400,9 +390,6 @@ class SelectorView(ctk.CTkFrame):
     def update_undo_button(self):
         self.undo_btn.configure(state="normal" if self.manager.last_record else "disabled")
 
-    def on_toggle_show_id(self):
-        self.settings.set("show_student_id", bool(self.show_id_var.get()))
-
     def on_toggle_include_absent(self):
         self.manager.include_absent = bool(self.include_absent_var.get())
         self.settings.set("include_absent", self.manager.include_absent)
@@ -422,13 +409,7 @@ class SelectorView(ctk.CTkFrame):
             messagebox.showinfo("情報", msg)
             return
 
-        if self.show_id_var.get():
-            self.id_label.configure(text=f"学籍番号: {student['student_id']}")
-            self.id_label.pack(pady=(18, 6), before=self.name_label)
-            self.name_label.pack_configure(pady=6)
-        else:
-            self.id_label.pack_forget()
-            self.name_label.pack_configure(pady=(18, 6))
+        self.id_label.configure(text=f"学籍番号: {student['student_id']}")
         self.name_label.configure(text=student['name'])
         self.kana_label.configure(text=f"({student['kana']})")
         self.show_result_screen()
