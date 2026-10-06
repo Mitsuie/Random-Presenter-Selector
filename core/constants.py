@@ -5,7 +5,7 @@
 
 APP_NAME = "Random-Presenter-Selector"
 APP_DISPLAY_NAME = "演習投影 統合管理システム"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 GITHUB_OWNER = "Mitsuie"
 GITHUB_REPO = "Random-Presenter-Selector"

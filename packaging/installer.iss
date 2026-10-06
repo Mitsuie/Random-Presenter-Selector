@@ -4,7 +4,7 @@
   #define MyAppName "演習投影 統合管理システム"
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Mitsuie"
